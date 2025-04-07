@@ -1,0 +1,93 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  dockerRegistryServiceConnection: 'azure-subscription'  # Your ACR service connection name
+  imageRepository: 'newspringbootdemo'                   # Custom image name
+  containerRegistry: 'myacr.azurecr.io'                  # Replace with your ACR login server
+  dockerfilePath: 'Dockerfile'
+  tag: '$(Build.BuildId)'
+  kubernetesServiceConnection: 'azure-subscription'
+  namespace: 'default'
+
+stages:
+- stage: Build
+  jobs:
+  - job: DependencyInstall
+    displayName: 'Install Dependencies'
+    steps:
+    - checkout: self
+      persistCredentials: true
+
+    - task: JavaToolInstaller@0
+      inputs:
+        versionSpec: '11'
+        jdkArchitecture: 'x64'
+        jdkSourceOption: 'PreInstalled'
+
+    - task: Maven@3
+      displayName: 'Install Maven dependencies'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        goals: 'clean install'
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+
+  - job: BuildImage
+    dependsOn: DependencyInstall
+    displayName: 'Build and Push Docker Image'
+    steps:
+    - task: Docker@2
+      displayName: 'Build and Push Docker Image'
+      inputs:
+        containerRegistry: $(dockerRegistryServiceConnection)
+        repository: $(imageRepository)
+        command: buildAndPush
+        Dockerfile: $(dockerfilePath)
+        tags: |
+          $(tag)
+
+- stage: Deploy
+  dependsOn: Build
+  jobs:
+  - deployment: DeployToAKS
+    environment: dev
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: Kubernetes@1
+            displayName: 'Deploy to AKS'
+            inputs:
+              connectionType: Azure Resource Manager
+              azureSubscription: $(kubernetesServiceConnection)
+              azureResourceGroup: 'myResourceGroup'  # Replace with your actual RG
+              kubernetesCluster: 'myAKSCluster'      # Replace with your AKS name
+              namespace: $(namespace)
+              command: apply
+              useConfigurationFile: true
+              configuration: |
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: newspringbootdemo
+                spec:
+                  replicas: 1
+                  selector:
+                    matchLabels:
+                      app: newspringbootdemo
+                  template:
+                    metadata:
+                      labels:
+                        app: newspringbootdemo
+                    spec:
+                      containers:
+                      - name: newspringbootdemo
+                        image: $(containerRegistry)/$(imageRepository):$(tag)
+                        ports:
+                        - containerPort: 8080

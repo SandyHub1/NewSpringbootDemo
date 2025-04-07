@@ -1,20 +1,24 @@
+# Trigger the pipeline on commits to the main branch
 trigger:
   branches:
     include:
       - main
 
+# Define the agent pool; using the latest Ubuntu image
 pool:
   vmImage: 'ubuntu-latest'
 
+# Define variables for reuse throughout the pipeline
 variables:
-  dockerRegistryServiceConnection: 'azure-subscription'  # Your ACR service connection name
-  imageRepository: 'newspringbootdemo'                   # Custom image name
-  containerRegistry: 'myacr.azurecr.io'                  # Replace with your ACR login server
-  dockerfilePath: 'Dockerfile'
-  tag: '$(Build.BuildId)'
-  kubernetesServiceConnection: 'azure-subscription'
-  namespace: 'default'
+  dockerRegistryServiceConnection: 'AzureServiceConnection'  # Name of the service connection
+  imageRepository: 'newspringbootdemo'                       # Name of the Docker image repository
+  containerRegistry: 'myacr.azurecr.io'                      # Azure Container Registry login server
+  dockerfilePath: 'Dockerfile'                               # Path to the Dockerfile
+  tag: '$(Build.BuildId)'                                    # Build ID as the image tag
+  kubernetesServiceConnection: 'AzureServiceConnection'      # Service connection for AKS
+  namespace: 'default'                                       # Kubernetes namespace for deployment
 
+# Define the stages of the pipeline
 stages:
 - stage: Build
   jobs:
@@ -24,33 +28,36 @@ stages:
     - checkout: self
       persistCredentials: true
 
+    # Install Java 11
     - task: JavaToolInstaller@0
       inputs:
         versionSpec: '11'
         jdkArchitecture: 'x64'
         jdkSourceOption: 'PreInstalled'
 
+    # Run Maven to clean and install dependencies
     - task: Maven@3
       displayName: 'Install Maven dependencies'
       inputs:
-        mavenPomFile: 'pom.xml'
-        goals: 'clean install'
-        publishJUnitResults: true
-        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        mavenPomFile: 'pom.xml'             # Path to the Maven POM file
+        goals: 'clean install'              # Maven goals to execute
+        publishJUnitResults: true           # Publish JUnit test results
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'  # Path to test result files
 
   - job: BuildImage
     dependsOn: DependencyInstall
     displayName: 'Build and Push Docker Image'
     steps:
+    # Build and push the Docker image to Azure Container Registry
     - task: Docker@2
       displayName: 'Build and Push Docker Image'
       inputs:
-        containerRegistry: $(dockerRegistryServiceConnection)
-        repository: $(imageRepository)
-        command: buildAndPush
-        Dockerfile: $(dockerfilePath)
+        containerRegistry: $(dockerRegistryServiceConnection)  # Service connection for ACR
+        repository: $(imageRepository)                         # Docker image repository
+        command: buildAndPush                                  # Command to build and push the image
+        Dockerfile: $(dockerfilePath)                          # Path to the Dockerfile
         tags: |
-          $(tag)
+          $(tag)                                               # Tag for the Docker image
 
 - stage: Deploy
   dependsOn: Build
@@ -61,16 +68,17 @@ stages:
       runOnce:
         deploy:
           steps:
+          # Deploy the application to Azure Kubernetes Service
           - task: Kubernetes@1
             displayName: 'Deploy to AKS'
             inputs:
               connectionType: Azure Resource Manager
-              azureSubscription: $(kubernetesServiceConnection)
-              azureResourceGroup: 'myResourceGroup'  # Replace with your actual RG
-              kubernetesCluster: 'myAKSCluster'      # Replace with your AKS name
-              namespace: $(namespace)
-              command: apply
-              useConfigurationFile: true
+              azureSubscription: $(kubernetesServiceConnection)  # Service connection for AKS
+              azureResourceGroup: 'myResourceGroup'              # Azure Resource Group containing AKS
+              kubernetesCluster: 'myAKSCluster'                  # Name of the AKS cluster
+              namespace: $(namespace)                            # Kubernetes namespace
+              command: apply                                     # Command to apply the configuration
+              useConfigurationFile: true                         # Use a configuration file for deployment
               configuration: |
                 apiVersion: apps/v1
                 kind: Deployment
@@ -88,6 +96,6 @@ stages:
                     spec:
                       containers:
                       - name: newspringbootdemo
-                        image: $(containerRegistry)/$(imageRepository):$(tag)
-                        ports:
-                        - containerPort: 8080
+                        image: $(containerRegistry)/$(imageRepository):$(
+::contentReference[oaicite:30]{index=30}
+ 
